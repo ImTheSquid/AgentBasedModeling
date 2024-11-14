@@ -3,9 +3,9 @@ import mesa
 import random
 
 # sample grid, definitely will change once gui is in place
-width = 10
-height = 10
-attribute_grid = np.zeros((width, height))
+w = 10
+h = 10
+attribute_grid = np.zeros((w, h))
 
 # 0 is open space
 # 1 is wall
@@ -37,7 +37,15 @@ attributes = {
     'both': 4
 }
 
-def plotLine(location, direction, goal='work') -> tuple | None:
+
+def distance(loc1, loc2, metric='taxicab') -> float:
+    if metric == 'taxicab':
+        return abs(loc1[0] - loc2[0]) + abs(loc1[1] - loc2[1])
+    elif metric == 'euclidean':
+        return np.sqrt((loc1[0] - loc2[0]) ** 2 + (loc1[1] - loc2[1]) ** 2)
+
+
+def plot_line(location, direction, goal='work'):
     """
     Looks from loc1 to loc2 using Bresenham's line algorithm
     in an attempt to find goal
@@ -62,10 +70,10 @@ def plotLine(location, direction, goal='work') -> tuple | None:
         loc_type = attribute_grid[x, y]
         if loc_type == attributes['wall']:
             return None
-        if loc_type[0] < 0 or loc_type[0] >= width or loc_type[1] < 0 or loc_type[1] >= height:
+        if loc_type[0] < 0 or loc_type[0] >= w or loc_type[1] < 0 or loc_type[1] >= h:
             return None
         if loc_type == attributes[goal]:
-            return (x, y)
+            return x, y
 
         if D > 0:
             y = y + 1
@@ -75,12 +83,14 @@ def plotLine(location, direction, goal='work') -> tuple | None:
     
         x += 1
 
+
 class StudentAgent(mesa.Agent):
     """An agent"""
 
     def __init__(self, model):
         super().__init__(model)
         self.focus = 100
+        self.has_target = False
         self.destinationStack = []
 
     def look(self):
@@ -88,19 +98,28 @@ class StudentAgent(mesa.Agent):
         theta = random.randInt(0, 359)
         y_direction = np.sin(theta * np.pi / 180)
         x_direction = np.cos(theta * np.pi / 180)
-        result = plotLine(self.pos, (x_direction, y_direction))
+        result = plot_line(self.pos, (x_direction, y_direction))
         if result:
             # found target
             self.destinationStack.append(result)
+            self.has_target = True
 
     def move(self):
         # very rudimentary
-        # TODO: change this mess
+        # TODO: change this mess, should use an actual pathfinding algo instead
         possible_steps = self.model.grid.get_neighborhood(
-            self.pos, moore=True, include_center=False
+            self.pos, vonneumann=True, include_center=False
         )
-        new_position = self.random.choice(possible_steps)
-        self.model.grid.move_agent(self, new_position)
+        # choose position based off of distance to target
+        if possible_steps:
+            choice = possible_steps[0]
+            best_dist = float('inf')
+            for my_pos in possible_steps:
+                dist = distance(my_pos, self.destinationStack[-1])
+                if dist < best_dist:
+                    best_dist = dist
+                    choice = my_pos
+            self.model.grid.move_agent(self, choice)
 
     def tick(self):
         self.focus -= 1
@@ -109,24 +128,22 @@ class StudentAgent(mesa.Agent):
 class RoomModel(mesa.Model):
     """A model with some number of agents."""
 
-    def __init__(self, n, width, height,seed=None):
+    def __init__(self, n, width, height, seed=None):
         super().__init__(seed=seed)
         self.num_agents = n
         self.grid = mesa.space.SingleGrid(width, height, True)
         
         # Create agents
         for _ in range(self.num_agents):
-            a = MoneyAgent(self)
+            a = StudentAgent(self)
             # Add the agent to a random grid cell
             spawn_point = spawn_points[0]
             self.grid.place_agent(a, spawn_point)
-
 
     def add_agents(self, n):
         self.num_agents += n
         for _ in range(n):
             a = StudentAgent(self)
-
 
     def step(self):
         self.datacollector.collect(self)
@@ -135,5 +152,5 @@ class RoomModel(mesa.Model):
 
 
 if __name__=="__main__":
-    model = RoomModel(10)
+    model = RoomModel(10, w, h)
     model.step()
