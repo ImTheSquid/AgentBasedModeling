@@ -1,11 +1,13 @@
 // place files you want to import through the `$lib` alias in this folder.
 export enum CellType {
-	Wall,
 	Entrance,
 	Exit,
+	Wall,
 	StudyTable,
 	Chair
 }
+
+export const cellTypeKeys = Object.keys(CellType).filter((v) => isNaN(Number(v)));
 
 export interface BaseCell {
 	type: CellType;
