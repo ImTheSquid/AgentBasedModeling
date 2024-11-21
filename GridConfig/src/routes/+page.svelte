@@ -1,7 +1,66 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { CellType, cellTypeKeys, colorForCell, type Cell } from '$lib';
+	import { CellType, cellTypeKeys, colorForCell, type Cell, type EntranceCell } from '$lib';
 	import { SvelteSet } from 'svelte/reactivity';
+
+	function downloadJSON() {
+		// Convert the JSON data to a string
+		const jsonString = JSON.stringify(
+			{
+				gridSize: sideLength,
+				data: gridData
+			},
+			null,
+			2
+		);
+
+		// Create a Blob from the JSON string
+		const blob = new Blob([jsonString], { type: 'application/json' });
+
+		// Create a temporary anchor element
+		const link = document.createElement('a');
+		link.href = URL.createObjectURL(blob);
+
+		// Set the download attribute with a file name
+		link.download = 'data.json';
+
+		// Programmatically click the link to trigger the download
+		link.click();
+
+		// Clean up by revoking the object URL
+		URL.revokeObjectURL(link.href);
+	}
+
+	function handleFileUpload(event: Event): void {
+		const input = event.target as HTMLInputElement;
+		const file = input.files?.[0]; // Get the uploaded file
+
+		if (file && file.type === 'application/json') {
+			const reader = new FileReader();
+
+			// Read the file as text
+			reader.onload = (e: ProgressEvent<FileReader>) => {
+				try {
+					if (e.target?.result) {
+						// Parse the JSON content
+						let parsed: { data: Record<string, Cell>; gridSize: number } = JSON.parse(
+							e.target.result as string
+						);
+						gridData = parsed.data;
+						sideLength = parsed.gridSize;
+					}
+				} catch (error) {
+					console.error('Invalid JSON file:', error);
+					alert('The uploaded file is not a valid JSON file.');
+				}
+			};
+
+			// Trigger the file reading
+			reader.readAsText(file);
+		} else {
+			alert('Please upload a valid JSON file.');
+		}
+	}
 
 	function createSvg(tagName: string) {
 		var svgNS = 'http://www.w3.org/2000/svg';
@@ -16,7 +75,7 @@
 
 		for (let i = 0; i < numberPerSide; i++) {
 			for (let j = 0; j < numberPerSide; j++) {
-				var number = `${i}, ${j}`;
+				var number = `${j}, ${i}`;
 				let cellData = number in gridData ? gridData[number] : null;
 				let boxColor = selectedCells.has(number)
 					? 'yellow'
@@ -35,9 +94,9 @@
 				g.appendChild(box);
 				if (showNumbers) {
 					var text = createSvg('text');
-					text.appendChild(document.createTextNode((i * numberPerSide + j).toString()));
+					text.appendChild(document.createTextNode(number));
 					text.setAttribute('fill', textColor);
-					text.setAttribute('font-size', '4');
+					text.setAttribute('font-size', '3');
 					text.setAttribute('x', '1');
 					text.setAttribute('y', (size / 2 + 1).toString());
 					text.setAttribute('id', number.toString());
@@ -54,7 +113,14 @@
 				let id = target?.id;
 				if (!id) return;
 
-				if (inSelectionMode) {
+				if (cellPickMode) {
+					let data = id.split(',');
+					let x = Number(data[0]);
+					let y = Number(data[1]);
+					gridData[cellPickMode].associatedExit = [x, y];
+					cellPickMode = null;
+					return;
+				} else if (inSelectionMode) {
 					selectedCells.add(id);
 					return;
 				}
@@ -103,6 +169,7 @@
 	let showNumbers: boolean = $state(true);
 	let inSelectionMode: boolean = $state(false);
 	let activeSelect: boolean = $state(false);
+	let cellPickMode: string | null = $state(null);
 
 	$effect(() => {
 		sideLength = Math.max(sideLength, 1);
@@ -146,6 +213,8 @@
 	onclick={(_) => (inSelectionMode = !inSelectionMode)}>Toggle Selection</button
 >
 <button class="bg-gray-300 p-2" onclick={(_) => clearSelection()}>Clear Selection</button>
+<button class="bg-green-300 p-2" onclick={(_) => downloadJSON()}>DOWNLOAD</button>
+<input type="file" accept="application/json" onchange={handleFileUpload} />
 <label for="length">Num per side:</label>
 <input id="length" bind:value={sideLength} type="number" />
 <label for="showNumbers">Show numbers:</label>
@@ -167,3 +236,21 @@
 	{/each}
 </ul>
 <div id="container"></div>
+{#if Object.values(gridData).filter((g) => g.type === CellType.Entrance).length > 0}
+	<h2 class="text-lg font-bold">Entrance Node Associations (0 indexed)</h2>
+	<ul>
+		{#each Object.keys(gridData).filter((g) => gridData[g].type === CellType.Entrance) as data}
+			<li>
+				{data}: X:
+				<input type="number" bind:value={(gridData[data] as EntranceCell).associatedExit[0]} />
+				Y:
+				<input type="number" bind:value={(gridData[data] as EntranceCell).associatedExit[1]} />
+
+				<button
+					class={`${cellPickMode === data ? 'bg-red-300' : 'bg-gray-300'} p-2`}
+					onclick={(_) => (cellPickMode = data)}>Pick Cell</button
+				>
+			</li>
+		{/each}
+	</ul>
+{/if}
