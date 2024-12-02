@@ -10,13 +10,13 @@ import json
 import networkx as nx
 from mesa import Model
 #from mesa.examples.basic.boid_flockers.agents import Boid
-from mesa.space import ContinuousSpace
+from mesa.space import ContinuousSpace, SingleGrid
 from mesa.space import NetworkGrid
 from mesa.datacollection import DataCollector
 
 class IndoorModel(Model):
-    """Overall model class. Handles agent creation, entrance selection, 
-       update space attractiveness, removing agents, time stepping, 
+    """Overall model class. Handles agent creation, entrance selection,
+       update space attractiveness, removing agents, time stepping,
        placement, and scheduling."""
 
     def __init__(
@@ -38,7 +38,7 @@ class IndoorModel(Model):
         friendship_group=1,     #added by NBC
         loudness=0.2,           #added by NBC
         leave_need=0.05,        #added by NBC
-        seed=None,              
+        seed=None,
     ):
         """Create a new ABM student model.
 
@@ -52,11 +52,11 @@ class IndoorModel(Model):
             cohere: Weight of cohesion behavior (default: 0.03)
             separate: Weight of separation behavior (default: 0.015)
             match: Weight of alignment behavior (default: 0.05)
-            
-            
-            
-            
-            
+
+
+
+
+
             seed: Random seed for reproducibility (default: None)
         """
         super().__init__(seed=seed)
@@ -68,14 +68,16 @@ class IndoorModel(Model):
         self.separation = separation
 
         # Set up the space
-        input_string = ""
-        block_data = parse_block_data(input_string)
-        width = #insert width from block_data
-        height = #insert height from block_data
-        self.space = SingleGrid(width, height, torus=True)       
- 
+        file_data = None
+        with open('environment.json', 'r') as f:
+            file_data = json.load(f)
+        block_data = self.parse_block_data(file_data["data"])
+        width = file_data["gridSize"]
+        height = width
+        self.space = SingleGrid(width, height, torus=True)
+
         self.entrance_blocks = [
-            tuple(map(int, coord.split(","))) for coord, attr in space.items() if attr["type"] == "entrance"
+            tuple(map(int, coord.split(","))) for coord, attr in self.space.items() if attr["type"] == "entrance"
         ]
 
         # Store "flocking" weights - Need?
@@ -89,25 +91,23 @@ class IndoorModel(Model):
         self.average_heading = None
         self.update_average_heading()
 
-    def parse_block_data(input_string):
+    def parse_block_data(self, block_data):
         """
         Parse a JSON-like string into a Python dictionary representing block data.
-        
+
         Args:
-            input_string (str): The JSON-like string input.
-            
+            block_data (JSON): The JSON input.
+
         Returns:
             dict: Parsed block data.
         """
-        # Parse the input string into a Python dictionary
-        block_data = json.loads(input_string)
-        
+
         processed_block_data = {}
         for key, value in block_data.items():
             # Convert string keys like "0,0" to tuple keys like (0, 0)
             coords = tuple(map(int, key.split(',')))
             processed_block_data[coords] = value
-        
+
         return processed_block_data
 
     # def make_agents(self):
@@ -167,7 +167,7 @@ class IndoorModel(Model):
         """
         Calculate a valid direction for an agent to move, avoiding walls, exits,
         and boundaries.
-        
+
         entrance_pos: tuple - (x, y) coordinates of the entrance block
         space: MultiGrid or ContinuousSpace - the simulation space
         block_data: dict - a dictionary with block types keyed by coordinates
