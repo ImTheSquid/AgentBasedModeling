@@ -73,11 +73,14 @@ class StudentAgent(mesa.Agent):
     socializing or studying behaviors.
     """
 
-    def __init__(self, unique_id, model):
+    def __init__(self, unique_id, model, loudness=2):
         super().__init__(unique_id, model)
         self.focus = 100
         self.has_target = False
         self.destination_stack = []
+
+        self.loudness = loudness
+        self.distractability = 2
 
     def look(self):
         """
@@ -146,9 +149,23 @@ class StudentAgent(mesa.Agent):
         """
         Perform socializing or studying if at a valid location.
         """
+        if self.pos is None:
+            return
+
         cell_type = attribute_grid[self.pos[0], self.pos[1]]
         if cell_type == attributes['social']:
             print(f"Agent {self.unique_id} is socializing at {self.pos}")
+            # reduce other agents nearby
+            neighbors = self.model.grid.get_neighbors(
+                self.pos,  # Position of the agent
+                moore=True,
+                include_center=False,
+                radius=self.loudness
+            )
+            for neighbor in neighbors:
+                print(f"Agent {self.unique_id} is distracting agent {neighbor.unique_id}")
+                neighbor.focus -= neighbor.distractability
+
         elif cell_type == attributes['work']:
             print(f"Agent {self.unique_id} is studying at {self.pos}")
 
@@ -193,7 +210,7 @@ def plot_line(location, direction):
 
 if __name__ == "__main__":
     model = IndoorModel(num_agents=40, width=w, height=h)
-    for i in range(100):  # Simulate 10 steps
+    for i in range(100):  # Simulate 100 steps
         print(f"Step {i + 1}")
         model.step()
 
