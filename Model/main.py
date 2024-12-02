@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import json
 import sys
 
+MAX_STUDENTS = 2
 
 def parse_block_data(file_name: str) -> tuple[NDArray, list[tuple[int, int]], list[tuple[int, int]], int]:
     """
@@ -39,25 +40,27 @@ def parse_block_data(file_name: str) -> tuple[NDArray, list[tuple[int, int]], li
 
 
 # Define attributes for grid locations
-attributes = {'wall': 1, 'open': 0, 'social': 2, 'work': 3, 'both': 4}
+attributes = {'wall': 2, 'open': 0, 'social': 4, 'work': 3, 'both': 5}
 
 # Grid dimensions and layout
 # Would need to reintegrate with the JSON parser
 w, h = 10, 10
-attribute_grid = np.array([
-    [0, 0, 0, 0, 0, 1, 3, 3, 3, 3],
-    [0, 3, 3, 3, 0, 1, 3, 0, 0, 3],
-    [0, 3, 3, 3, 0, 1, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 2, 2, 2, 2, 0, 0, 0],
-    [0, 0, 0, 2, 2, 2, 2, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-])
-spawn_points = [(0, 0), (9, 0)]
-exit_points = [(9, 9), (0, 9)]
+
+# attribute_grid = np.array([
+#     [0, 0, 0, 0, 0, 1, 3, 3, 3, 3],
+#     [0, 3, 3, 3, 0, 1, 3, 0, 0, 3],
+#     [0, 3, 3, 3, 0, 1, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#     [0, 0, 0, 2, 2, 2, 2, 0, 0, 0],
+#     [0, 0, 0, 2, 2, 2, 2, 0, 0, 0],
+#     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+# ])
+
+# spawn_points = [(0, 0), (9, 0)]
+# exit_points = [(9, 9), (0, 9)]
 
 attribute_grid, spawn_points, exit_points, side_length = parse_block_data(sys.argv[1])
 
@@ -81,6 +84,7 @@ class IndoorModel(mesa.Model):
         self.graph = self.build_graph()
 
         self.passages = np.zeros((width, height), dtype=int)
+        self.agent_zero_passage = np.zeros((width, height), dtype=int)
 
         # Create agents and place them at spawn points
         for _ in range(self.num_agents):
@@ -114,7 +118,7 @@ class StudentAgent(mesa.Agent):
 
     def __init__(self, unique_id, model, loudness=2):
         super().__init__(unique_id, model)
-        self.focus = 100
+        self.focus = 50
         self.has_target = False
         self.destination_stack = []
 
@@ -140,7 +144,7 @@ class StudentAgent(mesa.Agent):
         else:
             x_direction = 1
             y_direction = 0
-        result = plot_line(self.pos, (x_direction, y_direction))
+        result = plot_line(self.pos, (x_direction, y_direction), self)
         if result:
             self.destination_stack.append(result)
             self.has_target = True
@@ -156,28 +160,40 @@ class StudentAgent(mesa.Agent):
         try:
             cur_best = float('inf')
             next_move = self.pos
-            for _dir in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
-                _start_pos = (self.pos[0] + _dir[0], self.pos[1] + _dir[1])
-                if _start_pos in self.model.graph and target in self.model.graph:
-                    try:
-                        path = nx.astar_path(self.model.graph, _start_pos, target)
-                        if len(path) > 1:
-                            if len(path) < cur_best:
-                                cur_best = len(path)
-                                next_move = path[1]
-                            elif len(path) == cur_best and random.random() < 0.5:
-                                next_move = path[1]
-                    except nx.NetworkXNoPath:
-                        continue
-                else:
-                    continue
+            # for _dir in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+            #     _start_pos = (self.pos[0] + _dir[0], self.pos[1] + _dir[1])
+            #     if _start_pos in self.model.graph and target in self.model.graph:
+            #         try:
+            #             # nx.astar_path
+            #             path = nx.dijkstra_path(self.model.graph, _start_pos, target)
+            #             if len(path) > 1:
+            #                 if len(path) < cur_best:
+            #                     cur_best = len(path)
+            #                     next_move = path[0]
+            #                 elif len(path) == cur_best and random.random() < 0.5:
+            #                     next_move = path[0]
+            #         except nx.NetworkXNoPath:
+            #             continue
+            #     else:
+            #         continue
+
+                # nx.astar_path
+            path = nx.dijkstra_path(self.model.graph, self.pos, target)
+
+            if len(path) < 2:
+                next_move = path[0]
+            else:
+                next_move = path[1]
 
             self.model.grid.move_agent(self, next_move)
 
             # Track the space passed through
             x, y = next_move
             self.model.passages[x, y] += 1
-            if next_move in spawn_points:
+            if self.unique_id == 1:
+                self.model.agent_zero_passage[x, y] += 1
+
+            if next_move in exit_points:
                 self.model.grid.remove_agent(self)  # Remove from the grid
                 self.model.schedule.remove(self)
 
@@ -193,7 +209,7 @@ class StudentAgent(mesa.Agent):
 
         cell_type = attribute_grid[self.pos[0], self.pos[1]]
         if cell_type == attributes['social']:
-            print(f"Agent {self.unique_id} is socializing at {self.pos}")
+           # print(f"Agent {self.unique_id} is socializing at {self.pos}")
             # reduce other agents nearby
             neighbors = self.model.grid.get_neighbors(
                 self.pos,  # Position of the agent
@@ -202,7 +218,7 @@ class StudentAgent(mesa.Agent):
                 radius=self.loudness
             )
             for neighbor in neighbors:
-                print(f"Agent {self.unique_id} is distracting agent {neighbor.unique_id}")
+             #   print(f"Agent {self.unique_id} is distracting agent {neighbor.unique_id}")
                 neighbor.focus -= neighbor.distractability
 
         elif cell_type == attributes['work']:
@@ -213,17 +229,17 @@ class StudentAgent(mesa.Agent):
         The agent's behavior at each step: look, move, perform action, and deplete focus.
         """
 
-        if not self.has_target:
+        if not self.has_target and self.focus > 0:
             self.look()
         self.move()
         self.perform_action()
         self.focus -= 1
         if self.focus <= 0:
-            print(f"Agent {self.unique_id} is heading to exit.")
-            self.destination_stack.append(spawn_points[1])  # Go to exit
+        #    print(f"Agent {self.unique_id} is heading to exit.")
+            self.destination_stack.append(exit_points[random.randint(0, len(exit_points) - 1)])  # Go to exit
 
 
-def plot_line(location, direction):
+def plot_line(location, direction, agent):
     """
     Simulate a line of sight to find a target goal in a given direction.
 
@@ -241,19 +257,23 @@ def plot_line(location, direction):
         if loc_type == attributes['wall']:
             return None
         if loc_type in [attributes['social'], attributes['work']]:
-            return (x, y)
+            if len(agent.model.grid.get_cell_list_contents((x, y))) < MAX_STUDENTS:
+                return x, y
+            else:
+                return None
         x += dx
         y += dy
     return None
 
 
 if __name__ == "__main__":
-    model = IndoorModel(num_agents=40, width=w, height=h)
+    model = IndoorModel(num_agents=20, width=w, height=h)
     for i in range(100):  # Simulate 100 steps
         print(f"Step {i + 1}")
         model.step()
 
     print(model.passages)
+    print(model.agent_zero_passage)
 
     plt.imshow(model.passages, cmap="viridis", interpolation="none")
     plt.colorbar(label="Passages Count")
