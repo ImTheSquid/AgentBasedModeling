@@ -4,7 +4,39 @@ import networkx as nx
 import mesa
 from mesa.space import MultiGrid
 from mesa.time import RandomActivation
+from numpy.typing import NDArray
 import matplotlib.pyplot as plt
+import json
+import sys
+
+
+def parse_block_data(file_name: str) -> tuple[NDArray, list[tuple[int, int]], list[tuple[int, int]], int]:
+    """
+    Parse a JSON-like string into a Python dictionary representing block data.
+
+    Args:
+        block_data (JSON): The JSON input.
+
+    Returns:
+        dict: Parsed block data.
+    """
+
+    with open(file_name, 'r') as f:
+        block_data = json.load(f)
+        attribute_grid = np.zeros((block_data["gridSize"], block_data["gridSize"]))
+        spawns = []
+        exits = []
+        for key, value in block_data["data"].items():
+            # Convert string keys like "0,0" to tuple keys like (0, 0)
+            x, y = tuple(map(int, key.split(',')))
+            attribute_grid[y, x] = value["type"]
+            if value["associatedExit"] is not None:
+                ex, ey = value["associatedExit"]
+                spawns.append((y, x))
+                exits.append((ey, ex))
+
+        return attribute_grid, spawns, exits, block_data["gridSize"]
+
 
 # Define attributes for grid locations
 attributes = {'wall': 1, 'open': 0, 'social': 2, 'work': 3, 'both': 4}
@@ -26,6 +58,13 @@ attribute_grid = np.array([
 ])
 spawn_points = [(0, 0), (9, 0)]
 exit_points = [(9, 9), (0, 9)]
+
+attribute_grid, spawn_points, exit_points, side_length = parse_block_data(sys.argv[1])
+
+w = side_length
+h = side_length
+
+print(attribute_grid, spawn_points, exit_points)
 
 
 class IndoorModel(mesa.Model):
