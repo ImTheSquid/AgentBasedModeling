@@ -69,6 +69,7 @@ h = side_length
 
 print(attribute_grid, spawn_points, exit_points)
 
+NOISE_DECAY = 0.1
 
 class IndoorModel(mesa.Model):
     """
@@ -85,6 +86,11 @@ class IndoorModel(mesa.Model):
 
         self.passages = np.zeros((width, height), dtype=int)
         self.agent_zero_passage = np.zeros((width, height), dtype=int)
+
+        self.noise = np.zeros((width, height))
+
+        self.width = width
+        self.height = height
 
         # Create agents and place them at spawn points
         for _ in range(self.num_agents):
@@ -107,7 +113,24 @@ class IndoorModel(mesa.Model):
 
     def step(self):
         """Advance the model by one step."""
+        # Noise decay
+        self.noise = np.maximum(self.noise - NOISE_DECAY, 0.0)
+
         self.schedule.step()
+
+    def add_noise(self, cx: int, cy: int, noise: float = 1.0):
+        center = [cx, cy]
+        sigma = [noise * 3, noise * 3]
+        x = np.arange(self.width)
+        y = np.arange(self.height)
+        x_grid, y_grid = np.meshgrid(x, y)
+
+        # Gaussian equation
+        gaussian = noise * np.exp(
+            -((x_grid - center[1])**2 / (2 * sigma[1]**2) + (y_grid - center[0])**2 / (2 * sigma[0]**2))
+        )
+
+        self.noise += gaussian
 
 
 class StudentAgent(mesa.Agent):
